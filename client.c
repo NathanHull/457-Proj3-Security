@@ -4,7 +4,7 @@
 #include <string.h>
 
 int main(int argc, char** argv){
-	int sockfd = socket(AF_INET,SOCK_STREAM,0);
+	int sockfd = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
 	if(sockfd<0){
 		printf("There was an error creating the socket\n");
 		return 1;
@@ -17,8 +17,9 @@ int main(int argc, char** argv){
 
 	printf("Input desired port\n");
 	int port;
-	scanf("%i", &port);
-	getchar();
+	port = 9898;
+	//scanf("%i", &port);
+	//getchar();
 
 	printf("\nCommands:\n/quit - terminate client\n/list - list all connected users\n/message [user] [message] - send private [message] to [user]\n\n");
 
@@ -32,9 +33,8 @@ int main(int argc, char** argv){
 	serveraddr.sin_port=htons(port);
 	serveraddr.sin_addr.s_addr=inet_addr(ip);
 
-	int e = connect(sockfd,(struct sockaddr*)&serveraddr,sizeof(serveraddr));
-	if(e<0){
-		printf("There was an error connecting\n");
+	if (connect(sockfd,(struct sockaddr*)&serveraddr,sizeof(serveraddr)) < 0) {
+		perror("There was an error connecting\n");
 		return 1;
 	}
 
@@ -46,29 +46,36 @@ int main(int argc, char** argv){
 		for (i = 0; i < FD_SETSIZE; i++) {
 			if (FD_ISSET(i, &tmp_set)) {
 				if (i == sockfd) { // receiving msg from server
-					char line[5000];
-					recv(i, line, 5000, 0);
-					if (strcmp(line, "/quit\n") == 0) {
+					char status[25];
+					char line[1000];
+
+					recv(i, status, 25, 0);
+					printf("%s ", status);
+
+					if (strcmp(status, "/quit\n") == 0) {
 						printf ("Quitting\n");
 						close(i);
 						FD_CLR(i, &sockets);
 						return 0;
 					}
-					printf("Message from server: %s\n", line);
-					char status[5000];
-					recv(i, status, 5000, 0);
-					printf("%s\n", status);
+
+					recv(i, line, 1000, 0);
+					printf("%s\n", line);
 				}
+
 				else if (i == fileno(stdin)) {
-					char line[5000];
-					fgets(line, 5000, stdin);
+					char line[1000];
+					fgets(line, 1000, stdin);
 					send(sockfd, line, strlen(line) + 1, 0);
+
 					if (strcmp(line, "/quit\n") == 0) {
 						close(sockfd);
 						FD_CLR(sockfd, &sockets);
 						printf("Quitting\n");
 						return 0;
 					}
+
+					printf("\n");
 				}
 			}
 
@@ -76,5 +83,4 @@ int main(int argc, char** argv){
 	}
 	close(sockfd);
 	return 0;
-
 }
