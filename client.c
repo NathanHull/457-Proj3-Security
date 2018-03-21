@@ -52,7 +52,7 @@ int main(int argc, char** argv){
 					recv(i, status, 25, 0);
 					printf("%s ", status);
 
-					if (strcmp(status, "/quit\n") == 0) {
+					if (strncmp(status, "/quit", 5) == 0) {
 						printf ("Quitting\n");
 						close(i);
 						FD_CLR(i, &sockets);
