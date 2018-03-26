@@ -155,14 +155,17 @@ int main(int argc, char **argv){
 					FD_SET(clientsocket, &sockets); // every time I receive a client, also add it to the set
 
 					users[numUsers] = clientsocket; 
-					numUsers++;
+					printf("Client %i connected\n", clientsocket);
 
 					// Get key
 					unsigned char encryptedkey[256];
 					recv(clientsocket, encryptedkey, 256, 0);
-					printf("RECEIVED: |%s|\n", encryptedkey);
 					unsigned char decryptedkey[32];
+					rsa_decrypt(encryptedkey, strlen(encryptedkey), privkey, decryptedkey);
 					printf("Decrypted key: %s\n", decryptedkey);
+					keys[numUsers] = decryptedkey[32];
+					
+					numUsers++;
 
 
 
@@ -223,6 +226,11 @@ int main(int argc, char **argv){
 									close(x);
 								}
 							}
+
+							// Cleanup openssl resources
+							EVP_cleanup();
+							ERR_free_strings();
+
 							exit(0);
 
 						} else {
