@@ -1,3 +1,3 @@
 make: server.c client.c
-	gcc server.c -o aServer
-	gcc client.c -o bClient
+	gcc server.c -lcrypto -o aServer
+	gcc client.c -lcrypto -o bClient
