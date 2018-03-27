@@ -121,12 +121,13 @@ int main(int argc, char** argv){
 	// Encrypt symmetric key via RSA public key
 	FILE* pubf = fopen(pubfile, "rb");
 	pubkey = PEM_read_PUBKEY(pubf, NULL, NULL, NULL);
-	encryptedkey_len = rsa_encrypt(key, 32, pubkey, encryptedkey);
+	rsa_encrypt(key, 32, pubkey, encryptedkey);
 	printf("Encrypted symmetric key: %s\n", encryptedkey);
 
 	// Encrypt key
-	send(sockfd, encryptedkey, encryptedkey_len, 0);
-	printf("Key sent\n");
+	send(sockfd, encryptedkey, 256, 0);
+	printf("\nKey sent\n");
+	printf("\n");
 
 
 
@@ -139,22 +140,20 @@ int main(int argc, char** argv){
 		for (i = 0; i < FD_SETSIZE; i++) {
 			if (FD_ISSET(i, &tmp_set)) {
 				if (i == sockfd) {
-				printf("FIRST\n");
 					unsigned char status[33];
-					unsigned char message[1024];
+					unsigned char message[256];
 					unsigned char decryptedStatus[25];
-					unsigned char decryptedMessage[1024];
+					unsigned char decryptedMessage[256];
 					unsigned char iv[16];
 
 					recv(i, status, 33, 0);
 					if (strlen(status) == 0) {
 						continue;
 					}
-					printf("MESSAGE: |%s|\n", status);
 
-					// Decrypt status
-					strncpy(iv, status, 16);
-					decrypt(status, strlen(status), key, iv, decryptedStatus);
+					// Receive status and extract IV
+					int len = status[16];
+					memcpy(iv, status, 16);
 					printf("Received IV: %s\n", iv);
 					printf("%s ", status+16);
 
@@ -168,29 +167,32 @@ int main(int argc, char** argv){
 						return 0;
 					}
 
-					recv(i, message, 1024, 0);
-					printf("%s\n", message);
+					// Receive and decrypt message
+					recv(i, message, 256, 0);
+
+					decrypt(message, strlen(message), key, iv, decryptedMessage);
+
+					printf("%s\n", decryptedMessage);
 				}
 
 				else if (i == fileno(stdin)) {
 					// Generate random initialization vector to ensure different encryption for identical messages
-					printf("BEFORE\n");
 					unsigned char iv[16];
 					RAND_bytes(iv, 16);
-					printf("AFTER\n");
+					printf("Generated IV: %s\n", iv);
 
-					unsigned char encryptedMessage[1024];
-					int encryptedMessage_len;
-					unsigned char message[1024];
+					unsigned char encryptedMessage[256];
+					unsigned char message[256];
 
-					strncpy(message, iv, 16);
-					fgets(message+16, 1024, stdin);
+					memcpy(encryptedMessage, iv, 16);
+					fgets(message, 239, stdin);
 
 					// Encrypt message
-					encryptedMessage_len = encrypt(message+16, strlen((char*) message), key, iv, encryptedMessage);
+					int len = encrypt(message, strlen(message), key, iv, encryptedMessage+17);
+					encryptedMessage[16] = len;
 					printf("Encrypted message: %s\n", encryptedMessage);
 
-					send(sockfd, message, sizeof(encryptedMessage), 0);
+					send(sockfd, encryptedMessage, sizeof(encryptedMessage), 0);
 
 					if (strcmp(message, "/quit\n") == 0) {
 						close(sockfd);

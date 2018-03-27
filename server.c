@@ -87,8 +87,10 @@ int decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,
 
 int main(int argc, char **argv){
 	int sockfd = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
+	int enable = 1;
+	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
 	int users[10];
-	int keys[10];
+	unsigned char keys[10][32];
 	int numUsers = 0;
 
 	fd_set sockets; //fd stands for file descriptor
@@ -121,7 +123,6 @@ int main(int argc, char **argv){
 
 	for (x = 0; x < 10; x++) {
 		users[x] = -1;
-		keys[x] = -1;
 	}
 
 	
@@ -160,12 +161,14 @@ int main(int argc, char **argv){
 					// Get key
 					unsigned char encryptedkey[256];
 					recv(clientsocket, encryptedkey, 256, 0);
+
 					unsigned char decryptedkey[32];
-					rsa_decrypt(encryptedkey, strlen(encryptedkey), privkey, decryptedkey);
+					rsa_decrypt(encryptedkey, sizeof(encryptedkey), privkey, decryptedkey);
 					printf("Decrypted key: %s\n", decryptedkey);
-					keys[numUsers] = decryptedkey[32];
+					strcpy(keys[numUsers], decryptedkey);
 					
 					numUsers++;
+					printf("\n");
 
 
 
@@ -174,8 +177,8 @@ int main(int argc, char **argv){
 				// Handle server input
 				// =====================================================
 				} else if (i == fileno(stdin)) {
-					char status[33];
-					char line[1024];
+					unsigned char status[33];
+					unsigned char line[256];
 					fgets(line, sizeof(line), stdin);
 
 					// handle commands
@@ -218,6 +221,7 @@ int main(int argc, char **argv){
 									send(users[x],line,strlen(line)+1,0);
 								}
 							}
+							sleep(1);
 
 							for (x = 0; x < FD_SETSIZE; x++) {
 								if (FD_ISSET(x, &sockets)) {
@@ -257,14 +261,41 @@ int main(int argc, char **argv){
 				// Handle client's message
 				// =====================================================
 				else {
-					char status[33];
-					char line[1024];
-					char response[1024];
+					unsigned char status[33];
+					unsigned char line[256];
+					unsigned char decryptedMessage[256];
+					unsigned char response[256];
+					unsigned char encryptedResponse[256];
+					unsigned char iv[16];
 
-					recv(i,line,1024,0);
-					printf("From client %i: %s\n",i,line);
+					recv(i,line,256,0);
 
-					if (!strcmp(line,"/quit\n")) {
+					if(strlen(line) <= 0)
+						continue;
+
+					// Decrypt
+					int index = 0;
+					int len = line[16];
+					for (x = 0; x < numUsers; x++) {
+						if (users[x] == i) {
+							index = x;
+							break;
+						}
+					}
+					memcpy(iv, line, 16);
+					decrypt(line+17, len, keys[index], iv, decryptedMessage);
+					printf("From client %i: %s\n",i,line+16);
+					printf("Found IV: %s\n", iv);
+
+					for (x = 0; x < strlen(decryptedMessage); x++) {
+						if (decryptedMessage[x] == '\n') {
+							decryptedMessage[x+1] = 0;
+							break;
+						}
+					}
+					printf("Decrypted message: %s\n", decryptedMessage);
+
+					if (!strcmp(decryptedMessage,"/quit\n")) {
 						printf("Client %i Quitting\n\n",i);
 
 						// Omit user from table
@@ -278,32 +309,41 @@ int main(int argc, char **argv){
 						FD_CLR(i,&sockets);
 						close(i);
 
-					} else if (!strcmp(line, "/list\n")) {
-						strcpy(status, "Clients:");
+					} else if (!strcmp(decryptedMessage, "/list\n")) {
+						RAND_bytes(iv,16);
+						memcpy(status, iv, 16);
+						strcpy(status+17, "Clients:");
 						int curr = 0;
+						int thisIndex = -1;
 						for (x = 0; x < numUsers; x++) {
 							if (users[x] != -1) {
 								response[curr] = '0' + users[x];
 								curr++;
 								response[curr] = ' ';
 								curr++;
+								if (users[x] == i)
+									thisIndex = x;
 							}
 						}
 						response[curr] = '\n';
 
+						// encrypt list
+						int len = encrypt(response, strlen(response), keys[thisIndex], iv, encryptedResponse);
+						status[16] = len;
+
 						send(i,status,sizeof(status),0);
-						send(i,response,strlen(line)+1,0);
+						send(i,encryptedResponse,strlen(encryptedResponse)+1,0);
 						printf("List sent to user %i\n", i);
 						printf("\n");
 
-					} else if (!strncmp(line, "/message", 8)) {
+					} else if (!strncmp(decryptedMessage, "/message", 8)) {
 						int target = atoi((const char *) &line[9]);
 						printf("Private message sent from %i to %i: %s\n", i, target, line + 10);
 						sprintf(status, "Private msg from user %i:", i);
 						send(target, status, sizeof(status), 0);
 						send(target, line+10, strlen(line)-9, 0);
 
-					} else if (!strncmp(line, "password /kick", 14)) {
+					} else if (!strncmp(decryptedMessage, "password /kick", 14)) {
 						int target = atoi((const char *) &line[15]);	
 						printf("Kick command receieved from user %i for user %i\n", i, target);
 						for (x = 0; x < numUsers; x++) {
@@ -322,7 +362,7 @@ int main(int argc, char **argv){
 					} else {
 						// Broadcast message to all users
 						printf("Broadcasting from client %i\n", i);
-						sprintf(status, "Broadcast from client %i:", i);
+						sprintf(status, "%sBroadcast from client %i:", iv, i);
 						for (x = 0; x < numUsers; x++) {
 							if (users[x] != -1 && users[x] != i) {
 								send(users[x],status,strlen(status)+1,0);
