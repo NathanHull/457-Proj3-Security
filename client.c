@@ -140,22 +140,19 @@ int main(int argc, char** argv){
 		for (i = 0; i < FD_SETSIZE; i++) {
 			if (FD_ISSET(i, &tmp_set)) {
 				if (i == sockfd) {
-					unsigned char status[33];
+					unsigned char status[50];
 					unsigned char message[256];
-					unsigned char decryptedStatus[25];
+					unsigned char decryptedStatus[50];
 					unsigned char decryptedMessage[256];
 					unsigned char iv[16];
 
-					recv(i, status, 33, 0);
+					recv(i, status, 50, 0);
 					if (strlen(status) == 0) {
 						continue;
 					}
 
 					// Receive status and extract IV
-					int len = status[16];
-					memcpy(iv, status, 16);
-					printf("Received IV: %s\n", iv);
-					printf("%s ", status+16);
+					printf("%s ", status+17);
 
 					if (strncmp(status, "/quit", 5) == 0) {
 						printf ("Quitting\n");
@@ -167,12 +164,15 @@ int main(int argc, char** argv){
 						return 0;
 					}
 
+					// Extract status bits (length, IV)
+					int len = status[16];
+					memcpy(iv, status, 16);
+
 					// Receive and decrypt message
 					recv(i, message, 256, 0);
-
-					decrypt(message, strlen(message), key, iv, decryptedMessage);
-
+					decrypt(message, len, key, iv, decryptedMessage);
 					printf("%s\n", decryptedMessage);
+					printf("Received IV: %s\n\n", iv);
 				}
 
 				else if (i == fileno(stdin)) {

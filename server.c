@@ -177,7 +177,7 @@ int main(int argc, char **argv){
 				// Handle server input
 				// =====================================================
 				} else if (i == fileno(stdin)) {
-					unsigned char status[33];
+					unsigned char status[50];
 					unsigned char line[256];
 					fgets(line, sizeof(line), stdin);
 
@@ -261,7 +261,7 @@ int main(int argc, char **argv){
 				// Handle client's message
 				// =====================================================
 				else {
-					unsigned char status[33];
+					unsigned char status[50];
 					unsigned char line[256];
 					unsigned char decryptedMessage[256];
 					unsigned char response[256];
@@ -311,6 +311,7 @@ int main(int argc, char **argv){
 
 					} else if (!strcmp(decryptedMessage, "/list\n")) {
 						RAND_bytes(iv,16);
+						printf("Generated IV: %s\n", iv);
 						memcpy(status, iv, 16);
 						strcpy(status+17, "Clients:");
 						int curr = 0;
@@ -332,7 +333,7 @@ int main(int argc, char **argv){
 						status[16] = len;
 
 						send(i,status,sizeof(status),0);
-						send(i,encryptedResponse,strlen(encryptedResponse)+1,0);
+						send(i,encryptedResponse,len,0);
 						printf("List sent to user %i\n", i);
 						printf("\n");
 
@@ -362,11 +363,20 @@ int main(int argc, char **argv){
 					} else {
 						// Broadcast message to all users
 						printf("Broadcasting from client %i\n", i);
-						sprintf(status, "%sBroadcast from client %i:", iv, i);
+						sprintf(status+17, "Broadcast from client %i:", i);
 						for (x = 0; x < numUsers; x++) {
 							if (users[x] != -1 && users[x] != i) {
-								send(users[x],status,strlen(status)+1,0);
-								send(users[x],line,strlen(line)+1,0);
+								unsigned char encryptedMessage[256];
+								RAND_bytes(iv,16);
+								printf("Generated IV: %s\n", iv);
+								memcpy(status, iv, 16);
+
+								int len = encrypt(line, strlen(line), keys[x], iv, encryptedMessage);
+								status[16] = len;
+
+								send(users[x],status,sizeof(status),0);
+								send(users[x],encryptedMessage,len,0);
+								printf("Sent to %i\n", users[x]);
 							}
 						}
 
