@@ -338,11 +338,32 @@ int main(int argc, char **argv){
 						printf("\n");
 
 					} else if (!strncmp(decryptedMessage, "/message", 8)) {
-						int target = atoi((const char *) &line[9]);
+						RAND_bytes(iv,16);
+						printf("Generated IV: %s\n", iv);
+						int target = atoi((const char *) &decryptedMessage[9]);
+						int index = -1;
+						unsigned char encryptedResponse[256];
+
+						for (x = 0; x < numUsers; x++) {
+							if (users[x] == i) {
+								index = x;
+								break;
+							}
+						}
+
+						if(index == -1) {
+							perror("FATAL ERROR\n");
+						}
+
 						printf("Private message sent from %i to %i: %s\n", i, target, line + 10);
-						sprintf(status, "Private msg from user %i:", i);
+						sprintf(status+17, "Private msg from user %i:", i);
+
+						int len = encrypt(line, strlen(line), keys[index], iv, encryptedResponse);
+						status[16] = len;
+						memcpy(status, iv, 16);
+
 						send(target, status, sizeof(status), 0);
-						send(target, line+10, strlen(line)-9, 0);
+						send(target, encryptedResponse, len, 0);
 
 					} else if (!strncmp(decryptedMessage, "password /kick", 14)) {
 						int target = atoi((const char *) &line[15]);	
