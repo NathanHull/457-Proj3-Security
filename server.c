@@ -284,6 +284,7 @@ int main(int argc, char **argv){
 					}
 					memcpy(iv, line, 16);
 					decrypt(line+17, len, keys[index], iv, decryptedMessage);
+					line[len] = 0;
 					printf("From client %i: %s\n",i,line+16);
 					printf("Found IV: %s\n", iv);
 
@@ -316,6 +317,7 @@ int main(int argc, char **argv){
 						strcpy(status+17, "Clients:");
 						int curr = 0;
 						int thisIndex = -1;
+
 						for (x = 0; x < numUsers; x++) {
 							if (users[x] != -1) {
 								response[curr] = '0' + users[x];
@@ -345,7 +347,7 @@ int main(int argc, char **argv){
 						unsigned char encryptedResponse[256];
 
 						for (x = 0; x < numUsers; x++) {
-							if (users[x] == i) {
+							if (users[x] == target) {
 								index = x;
 								break;
 							}
@@ -355,18 +357,18 @@ int main(int argc, char **argv){
 							perror("FATAL ERROR\n");
 						}
 
-						printf("Private message sent from %i to %i: %s\n", i, target, line + 10);
 						sprintf(status+17, "Private msg from user %i:", i);
 
-						int len = encrypt(line, strlen(line), keys[index], iv, encryptedResponse);
-						status[16] = len;
+						int len = encrypt(decryptedMessage+11, strlen(decryptedMessage)-11, keys[index], iv, encryptedResponse);
 						memcpy(status, iv, 16);
+						status[16] = len;
 
 						send(target, status, sizeof(status), 0);
 						send(target, encryptedResponse, len, 0);
+						printf("Private message sent from %i to %i: %s\n", i, target, encryptedResponse + 11);
 
 					} else if (!strncmp(decryptedMessage, "password /kick", 14)) {
-						int target = atoi((const char *) &line[15]);	
+						int target = atoi((const char *) &line[16]);	
 						printf("Kick command receieved from user %i for user %i\n", i, target);
 						for (x = 0; x < numUsers; x++) {
 							if (users[x] == target) {
@@ -392,7 +394,7 @@ int main(int argc, char **argv){
 								printf("Generated IV: %s\n", iv);
 								memcpy(status, iv, 16);
 
-								int len = encrypt(line, strlen(line), keys[x], iv, encryptedMessage);
+								int len = encrypt(decryptedMessage, strlen(decryptedMessage), keys[x], iv, encryptedMessage);
 								status[16] = len;
 
 								send(users[x],status,sizeof(status),0);
